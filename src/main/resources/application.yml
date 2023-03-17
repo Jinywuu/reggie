@@ -1,6 +1,12 @@
 server:
   port: 8080
 spring:
+  #redis
+  redis:
+    host: 121.36.231.82
+    port: 6379
+    password: wujinyang
+    database: 0
   application:
     name: reggie_take_out
   datasource:
