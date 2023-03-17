@@ -23,4 +23,4 @@ mybatis-plus:
       id-type: auto
 
 reggie:
-  path: /usr/local/code/reggie/img
+  path: /usr/local/code/reggie/img/
