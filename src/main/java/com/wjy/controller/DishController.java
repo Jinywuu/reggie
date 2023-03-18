@@ -10,6 +10,7 @@ import com.wjy.dto.DishDto;
 import com.wjy.entity.Category;
 import com.wjy.entity.Dish;
 import com.wjy.entity.DishFlavor;
+import com.wjy.entity.Setmeal;
 import com.wjy.mapper.DishMapper;
 import com.wjy.service.CategoryService;
 import com.wjy.service.DishFlavorService;
@@ -168,6 +169,11 @@ public class DishController {
     @DeleteMapping
     public R<String> delete(@RequestParam(value = "ids") List<Integer>arr){
         for (Integer id : arr) {
+            //redis
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            Long categoryId = dishService.getById(id).getCategoryId();
+            String Key="dish_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
             //先删除菜品
             dishService.removeById(id);
             //再删除口味
@@ -186,6 +192,13 @@ public class DishController {
             LambdaUpdateWrapper<Dish> wrapper1 = new LambdaUpdateWrapper<>();
             wrapper1.eq(Dish::getId,id).set(Dish::getStatus,0);
             dishService.update(wrapper1);
+            //redis
+            LambdaUpdateWrapper<Dish> wrapper2 = new LambdaUpdateWrapper<>();
+            wrapper2.eq(Dish::getId,id);
+            Long categoryId = dishService.getOne(wrapper2).getCategoryId();
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            String Key="dish_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
         }
             return R.success("停售成功");
     }
@@ -197,6 +210,11 @@ public class DishController {
             LambdaUpdateWrapper<Dish> wrapper1 = new LambdaUpdateWrapper<>();
             wrapper1.eq(Dish::getId,id).set(Dish::getStatus,1);
             dishService.update(wrapper1);
+            //redis
+            Long categoryId = dishService.getById(id).getCategoryId();
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            String Key="dish_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
         }
         return R.success("起售成功");
     }
@@ -261,8 +279,10 @@ public class DishController {
         }
 
         //如果不存在的情况，将查询出的菜品数据缓存到redis
-        stringRedisTemplate.opsForValue().set(Key,JSON.toJSONString(list),60, TimeUnit.MINUTES);
-
+        if(status!=null) {
+            //排除修改套餐数据回显时，redis中生成的null
+            stringRedisTemplate.opsForValue().set(Key, JSON.toJSONString(list), 60, TimeUnit.MINUTES);
+        }
         return  R.success(list);
     }
 
