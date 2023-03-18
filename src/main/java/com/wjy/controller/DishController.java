@@ -227,10 +227,10 @@ public class DishController {
         * 因为在这种情况下，JSON.parseObject() 无法推断出要反序列化的类型。
         * */
         String json = stringRedisTemplate.opsForValue().get(Key);
-        list= JSON.parseObject(json, new TypeReference<List<DishDto>>(){});
-
+//        list= JSON.parseObject(json, new TypeReference<List<DishDto>>(){});
         //如果redis存在，则直接返回
-         if(list!=null){
+         if(JSON.parseObject(json, new TypeReference<List<DishDto>>(){})!=null){
+             list= JSON.parseObject(json, new TypeReference<List<DishDto>>(){});
              return  R.success(list);
          }
         LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<>();
