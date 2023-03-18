@@ -56,6 +56,9 @@ public class DishController {
         log.info(dishDto.toString());
 
         dishService.saveWithFlavor(dishDto);
+        //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+        String Key="dish_"+dishDto.getCategoryId()+"_1";
+        stringRedisTemplate.delete(Key);
 
         return R.success("新增菜品成功");
     }
@@ -152,6 +155,10 @@ public class DishController {
     public R<String> update(@RequestBody DishDto dishDto){
         log.info(dishDto.toString());
         dishService.updateWithFlavor(dishDto);
+
+        //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+        String Key="dish_"+dishDto.getCategoryId()+"_1";
+        stringRedisTemplate.delete(Key);
         return R.success("新增菜品成功");
     }
 
