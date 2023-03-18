@@ -1,5 +1,7 @@
 package com.wjy.controller;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -11,11 +13,14 @@ import com.wjy.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 //套餐管理
 @RestController
@@ -32,6 +37,8 @@ public class SetmealController {
     private DishService dishService;
     @Autowired
     private DishFlavorService dishFlavorService;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
    @PostMapping
     public R<String> Insert(@RequestBody  SetmealDto setmealDto){
          log.info(setmealDto.toString());
@@ -75,13 +82,16 @@ public class SetmealController {
     public R<SetmealDto> update(@PathVariable Long id){
         //复杂的业务逻辑，所以在SetmealServiceImpI中自定义函数来解决
        SetmealDto setmealDto = setmealService.getByIdWithSetmealDish(id);
-        return R.success(setmealDto);
+       return R.success(setmealDto);
     }
    //修改保存
    @PutMapping
    public  R<String> update(@RequestBody SetmealDto setmealDto){
        //复杂的业务逻辑，所以在SetmealServiceImpI中自定义函数来解决
        setmealService.updateSetmealDto(setmealDto);
+       //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+       String Key="Setmeal_"+setmealDto.getCategoryId()+"_1";
+       stringRedisTemplate.delete(Key);
        return R.success("保存成功");
    }
 
@@ -97,11 +107,13 @@ public class SetmealController {
             LambdaUpdateWrapper<Setmeal> wrapper = new LambdaUpdateWrapper<>();
             wrapper.eq(Setmeal::getId,ids).set(Setmeal::getStatus,0);
             setmealService.update(wrapper);
-//            LambdaQueryWrapper<Setmeal> wrapper = new LambdaQueryWrapper<>();
-//            wrapper.eq(Setmeal::getId,ids);
-//            Setmeal setmeal = setmealService.getOne(wrapper);
-//            setmeal.setStatus(0);
-//            setmealService.update(setmeal,wrapper);
+            //redis
+            LambdaUpdateWrapper<Setmeal> wrapper2 = new LambdaUpdateWrapper<>();
+            wrapper2.eq(Setmeal::getId,ids);
+            Long categoryId = setmealService.getOne(wrapper2).getCategoryId();
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            String Key="Setmeal_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
         }
        return R.success("停售成功");
     }
@@ -113,31 +125,29 @@ public class SetmealController {
             LambdaUpdateWrapper<Setmeal> wrapper = new LambdaUpdateWrapper<>();
             wrapper.eq(Setmeal::getId,ids).set(Setmeal::getStatus,1);
             setmealService.update(wrapper);
-//            LambdaQueryWrapper<Setmeal> wrapper = new LambdaQueryWrapper<>();
-//            wrapper.eq(Setmeal::getId,ids);
-//            Setmeal setmeal = setmealService.getOne(wrapper);
-//            setmeal.setStatus(0);
-//            setmealService.update(setmeal,wrapper);
+            //redis
+            LambdaUpdateWrapper<Setmeal> wrapper2 = new LambdaUpdateWrapper<>();
+            wrapper2.eq(Setmeal::getId,ids);
+            Long categoryId = setmealService.getOne(wrapper2).getCategoryId();
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            String Key="Setmeal_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
         }
         return R.success("起售成功");
     }
-
-
-
-
-
     //套餐的删除
     @DeleteMapping
     public R<String> deleteSetmeal(@RequestParam(value = "ids")List<Long> ids){
-      log.info(ids.toString());
-       //在不考虑是否在出售不能删除的时候的默认删除策略
-       //        for (Integer id : ids) {
-////            setmealService.removeWithDish();
-//            setmealService.removeById(id);
-//            LambdaQueryWrapper<SetmealDish> wrapper = new LambdaQueryWrapper<>();
-//            wrapper.eq(SetmealDish::getSetmealId,id);
-//            setmealDishService.remove(wrapper);
-//        }
+       log.info(ids.toString());
+        for (Long id : ids) {
+            //redis
+            LambdaQueryWrapper<Setmeal> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(Setmeal::getId,id);
+            Long categoryId = setmealService.getOne(wrapper).getCategoryId();
+            //避免后台修改数据前端不访问数据库产生脏数据，清理一下redis已经缓存的数据
+            String Key="Setmeal_"+categoryId+"_1";
+            stringRedisTemplate.delete(Key);
+        }
         return setmealService.removeWithDish(ids);
     }
 
@@ -147,18 +157,21 @@ public class SetmealController {
     public R<List<Setmeal>> getdishlist(@RequestParam(value="categoryId")Long categoryId,
                                         @RequestParam(value = "status",required = false)String status
     ){
-        log.info("categoryId:{}",categoryId);
-        log.info("status:{}",status);
+        List<Setmeal> setmeals = new ArrayList<>();
+        String Key="Setmeal_"+categoryId+"_"+status;
+        //先从redis中获取缓存数据
+        String json = stringRedisTemplate.opsForValue().get(Key);
+        //如果redis存在，则直接返回
+        if(JSON.parseObject(json, new TypeReference<List<Setmeal>>(){})!=null){
+            setmeals= JSON.parseObject(json, new TypeReference<List<Setmeal>>(){});
+            return  R.success(setmeals);
+        }
         LambdaQueryWrapper<Setmeal> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Setmeal::getCategoryId,categoryId).eq(Setmeal::getStatus,status);
-        Setmeal setmeal = setmealService.getOne(wrapper);
-        List<Setmeal> setmeals = new ArrayList<>();
-        setmeals.add(setmeal);
+        List<Setmeal> list = setmealService.list(wrapper);
+        setmeals=list;
+        //如果不存在的情况，将查询出的菜品数据缓存到redis
+        stringRedisTemplate.opsForValue().set(Key,JSON.toJSONString(setmeals),60, TimeUnit.MINUTES);
         return  R.success(setmeals);
     }
-
-
-
-
-
 }
