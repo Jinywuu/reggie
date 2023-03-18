@@ -1,5 +1,7 @@
 package com.wjy.controller;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -15,10 +17,13 @@ import com.wjy.service.DishService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 菜品管理
@@ -35,6 +40,9 @@ public class DishController {
 
     @Autowired
     private CategoryService categoryService;
+    @Autowired
+    //操作redis需要注入的对象
+    private StringRedisTemplate stringRedisTemplate;
 //    @Autowired
 //    private DishMapper dishMapper;
 
@@ -206,9 +214,25 @@ public class DishController {
     public R<List<DishDto>> getdishlist(@RequestParam(value="categoryId")Long categoryId,
                                      @RequestParam(value = "status",required = false)String status
     ){
-        log.info("categoryId:{}",categoryId);
-        log.info("status:{}",status);
         List<DishDto> list = new ArrayList<>();
+        //动态拼接redis键
+        String Key="dish_"+categoryId+"_"+status;
+
+        //先从redis中获取缓存数据
+        //(StringRedisTemplte和FastJosn的序列化和反序列化实现复杂类型在opsForValue中的存取（菜品缓存到redis）)
+        /*
+        * 在这个示例中，我们使用了 JSON.toJSONString() 将 List<DishDto> 对象转换为 JSON 字符串，
+        * 并将其存储在 Redis 中。然后，我们使用 JSON.parseObject() 从 Redis 中检索并反序列化 JSON 字符串，
+        * 以还原原始对象。请注意，我们使用了 TypeReference 来指定要反序列化的对象类型，
+        * 因为在这种情况下，JSON.parseObject() 无法推断出要反序列化的类型。
+        * */
+        String json = stringRedisTemplate.opsForValue().get(Key);
+        list= JSON.parseObject(json, new TypeReference<List<DishDto>>(){});
+
+        //如果redis存在，则直接返回
+         if(list!=null){
+             return  R.success(list);
+         }
         LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Dish::getCategoryId,categoryId);
         if (status != null) {
@@ -228,7 +252,9 @@ public class DishController {
             dto.setFlavors(list3);
             list.add(dto);
         }
-//        List<Dish> list = dishService.list(wrapper);
+
+        //如果不存在的情况，将查询出的菜品数据缓存到redis
+        stringRedisTemplate.opsForValue().set(Key,JSON.toJSONString(list),60, TimeUnit.MINUTES);
 
         return  R.success(list);
     }

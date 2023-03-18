@@ -105,7 +105,7 @@ public class UserController {
 
 
             //如果用户登录成功，删除Redis缓存的验证码
-            stringRedisTemplate.delete("phone");
+            stringRedisTemplate.delete(phone);
 
             return R.success(user);
         }
