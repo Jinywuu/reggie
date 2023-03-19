@@ -1,6 +1,10 @@
 server:
   port: 8080
 spring:
+  #指定cache的底层实现
+  cache:
+    redis:
+      time-to-live: 3600000 #设置存活时间为一小时
   #redis
   redis:
     host: 121.36.231.82
@@ -12,7 +16,7 @@ spring:
   datasource:
     druid:
       driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://localhost:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      url: jdbc:mysql://121.36.231.82:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
       username: root
       password: wujinyang
   banner:
@@ -29,4 +33,4 @@ mybatis-plus:
       id-type: auto
 
 reggie:
-  path: D:\img\ #/usr/local/code/reggie/img/
+  path: /usr/local/code/reggie/img/

@@ -1,11 +1,14 @@
 package com.wjy.common;
 
 import lombok.Data;
+import org.omg.PortableServer.SERVANT_RETENTION_POLICY_ID;
+
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 //通用的返回结果，服务器响应的数据最终都会封装成此对象
 @Data
-public class R<T> {
+public class R<T> implements Serializable {
 
     private Integer code; //编码：1成功，0和其它数字为失败
 
